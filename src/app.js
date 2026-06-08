@@ -59,6 +59,13 @@ app.use(
   })
 );
 
+app.get("/cors-test", (req, res) => {
+  res.json({
+    clientUrl: process.env.CLIENT_URL,
+    origin: req.headers.origin,
+  });
+});
+
 // 3. Rate Limiter (Apply globally to /api/ routes)
 app.use("/api", apiLimiter);
 
