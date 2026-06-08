@@ -28,15 +28,15 @@ if (process.env.NODE_ENV !== "production") {
 // 2. Security Middlewares
 app.use(helmet());
 const allowedOrigins = [
-  "http://localhost:5173", // Vite frontend
-  "http://localhost:3000", // React frontend
-  process.env.CLIENT_URL,  // Production frontend
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "https://nostlabel-frontend.vercel.app",
+  process.env.CLIENT_URL,
 ].filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow Postman, mobile apps, server-to-server requests
       if (!origin) {
         return callback(null, true);
       }
@@ -45,9 +45,9 @@ app.use(
         return callback(null, true);
       }
 
-      console.log("Blocked Origin:", origin);
+      console.log("Blocked by CORS:", origin);
 
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
+      return callback(new Error(`Origin not allowed: ${origin}`));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
