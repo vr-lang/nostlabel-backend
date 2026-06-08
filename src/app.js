@@ -59,10 +59,9 @@ app.use(
   })
 );
 
-app.get("/cors-test", (req, res) => {
+app.get("/version", (req, res) => {
   res.json({
-    clientUrl: process.env.CLIENT_URL,
-    origin: req.headers.origin,
+    version: "2026-06-08-CORS-FIX",
   });
 });
 
