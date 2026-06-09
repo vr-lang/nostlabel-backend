@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const sanitizeMongoUri = (uri) => {
   if (!uri) return uri;
+
   try {
     const protocolIndex = uri.indexOf("://");
     if (protocolIndex === -1) return uri;
@@ -21,7 +22,6 @@ const sanitizeMongoUri = (uri) => {
     const username = credentials.substring(0, firstColonIndex);
     const password = credentials.substring(firstColonIndex + 1);
 
-    // URL-encode password in case it contains special characters like '@'
     const encodedPassword = encodeURIComponent(password);
 
     return `${protocol}${username}:${encodedPassword}@${host}`;
@@ -33,13 +33,41 @@ const sanitizeMongoUri = (uri) => {
 
 const connectDB = async () => {
   try {
+    console.log("========== DATABASE DEBUG ==========");
+    console.log("NODE_ENV:", process.env.NODE_ENV);
+    console.log("MONGODB_URI Exists:", !!process.env.MONGODB_URI);
+
+    if (process.env.MONGODB_URI) {
+      console.log(
+        "MONGODB_URI Preview:",
+        process.env.MONGODB_URI.substring(0, 25) + "..."
+      );
+    }
+
     const rawUri = process.env.MONGODB_URI;
+
+    if (!rawUri) {
+      throw new Error("MONGODB_URI environment variable is missing");
+    }
+
     const sanitizedUri = sanitizeMongoUri(rawUri);
-    
-    const connectionInstance = await mongoose.connect(sanitizedUri);
-    console.log(`\n MongoDB Connected! DB HOST: ${connectionInstance.connection.host}`);
+
+    console.log("Attempting MongoDB connection...");
+
+    const connectionInstance = await mongoose.connect(sanitizedUri, {
+      serverSelectionTimeoutMS: 10000,
+    });
+
+    console.log(
+      `MongoDB Connected! DB HOST: ${connectionInstance.connection.host}`
+    );
+
+    console.log("========== DATABASE CONNECTED ==========");
   } catch (error) {
-    console.error("MONGODB Connection error: ", error);
+    console.error("========== DATABASE ERROR ==========");
+    console.error(error);
+    console.error("====================================");
+
     process.exit(1);
   }
 };
