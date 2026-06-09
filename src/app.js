@@ -27,27 +27,26 @@ if (process.env.NODE_ENV !== "production") {
 
 // 2. Security Middlewares
 app.use(helmet());
+
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
   "https://nostlabel-frontend.vercel.app",
-  process.env.CLIENT_URL,
-].filter(Boolean);
+  "https://nostlabel-frontend-q12dn7qjn-yuvraj-singh-s-projects2.vercel.app",
+];
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin) {
-        return callback(null, true);
-      }
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      console.log("Blocked by CORS:", origin);
+      console.log("Blocked Origin:", origin);
 
-      return callback(new Error(`Origin not allowed: ${origin}`));
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -58,13 +57,6 @@ app.use(
     ],
   })
 );
-
-app.get("/version", (req, res) => {
-  res.json({
-    version: "2026-06-08-CORS-FIX",
-  });
-});
-
 // 3. Rate Limiter (Apply globally to /api/ routes)
 app.use("/api", apiLimiter);
 
