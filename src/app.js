@@ -18,6 +18,8 @@ dotenv.config();
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 // 1. Logging Middleware
 if (process.env.NODE_ENV !== "production") {
   app.use(morgan("dev"));
@@ -58,7 +60,7 @@ app.use(
   })
 );
 // 3. Rate Limiter (Apply globally to /api/ routes)
-app.use("/api", apiLimiter);
+// app.use("/api", apiLimiter);
 
 // 4. Request Parsers
 app.use(express.json({ limit: "16kb" }));
