@@ -34,7 +34,8 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
   "https://nostlabel-frontend.vercel.app",
-  "https://nostlabel-frontend-q12dn7qjn-yuvraj-singh-s-projects2.vercel.app",
+  "https://nostlabel.com",
+  "https://www.nostlabel.com",
 ];
 
 app.use(
