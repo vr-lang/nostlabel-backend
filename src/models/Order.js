@@ -136,6 +136,25 @@ const orderSchema = new mongoose.Schema(
       uppercase: true,
       trim: true,
     },
+    offerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Offer",
+    },
+    offerName: {
+      type: String,
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+    },
+    originalTotal: {
+      type: Number,
+      default: 0,
+    },
+    finalTotal: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

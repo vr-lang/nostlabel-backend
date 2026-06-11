@@ -2,6 +2,8 @@ import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import User from "../models/User.js";
 import Coupon from "../models/Coupon.js";
+import Offer from "../models/Offer.js";
+import { calculateOfferDiscount } from "./offerController.js";
 import { ApiError } from "../utils/apiError.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -14,8 +16,11 @@ import { sendOrderConfirmationEmail, sendOrderStatusUpdateEmail } from "../servi
 const placeOrder = asyncHandler(async (req, res) => {
   const { shippingAddressId, paymentMethod = "RAZORPAY", couponCode, notes } = req.body;
 
-  // 1. Fetch user cart and profile
-  const user = await User.findById(req.user._id).populate("cart.product");
+  // 1. Fetch user cart and profile (populating product category for the offer engine)
+  const user = await User.findById(req.user._id).populate({
+    path: "cart.product",
+    populate: { path: "category" }
+  });
   if (!user || user.cart.length === 0) {
     throw new ApiError(400, "Your shopping cart is empty");
   }
@@ -60,6 +65,27 @@ const placeOrder = asyncHandler(async (req, res) => {
     });
   }
 
+  // Apply offer discount first (Stacking: Offer applies, then coupon applies on remainder)
+  const now = new Date();
+  const activeOffers = await Offer.find({
+    isActive: true,
+    startDate: { $lte: now },
+    endDate: { $gte: now },
+  }).sort({ priority: -1 });
+
+  let offerDiscountAmount = 0;
+  let appliedOffer = null;
+
+  for (const offer of activeOffers) {
+    const offerRes = calculateOfferDiscount(user.cart, offer);
+    if (offerRes.discountAmount > offerDiscountAmount) {
+      offerDiscountAmount = offerRes.discountAmount;
+      appliedOffer = offerRes.appliedOffer;
+    }
+  }
+
+  const discountedSubtotalForCoupon = subtotal - offerDiscountAmount;
+
   // 4. Handle coupon application
   let discount = 0;
   let couponRef = null;
@@ -78,28 +104,28 @@ const placeOrder = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Coupon limit reached");
     }
 
-    if (subtotal < coupon.minimumOrderValue) {
-      throw new ApiError(400, `Minimum purchase of ₹${coupon.minimumOrderValue} required for this coupon`);
+    if (discountedSubtotalForCoupon < coupon.minimumOrderValue) {
+      throw new ApiError(400, `Minimum purchase of ₹${coupon.minimumOrderValue} required for this coupon after offer discounts`);
     }
 
     if (coupon.discountType === "PERCENTAGE") {
-      discount = (subtotal * coupon.discountValue) / 100;
+      discount = (discountedSubtotalForCoupon * coupon.discountValue) / 100;
     } else {
       discount = coupon.discountValue;
     }
 
-    if (discount > subtotal) {
-      discount = subtotal;
+    if (discount > discountedSubtotalForCoupon) {
+      discount = discountedSubtotalForCoupon;
     }
 
     couponRef = coupon;
   }
 
   // 5. Calculate shipping and taxes
-  const shippingCharge = subtotal > 1500 ? 0 : 99; // Free shipping above 1500
+  const shippingCharge = discountedSubtotalForCoupon > 1500 ? 0 : 99; // Free shipping above 1500
   const gstRate = process.env.GST_RATE !== undefined ? parseFloat(process.env.GST_RATE) : 12;
-  const tax = Math.round((subtotal - discount) * (gstRate / 100) * 100) / 100;
-  const totalAmount = Math.round((subtotal - discount + shippingCharge + tax) * 100) / 100;
+  const tax = Math.round((discountedSubtotalForCoupon - discount) * (gstRate / 100) * 100) / 100;
+  const totalAmount = Math.round((discountedSubtotalForCoupon - discount + shippingCharge + tax) * 100) / 100;
 
   // 6. Create the order
   const order = new Order({
@@ -125,6 +151,11 @@ const placeOrder = asyncHandler(async (req, res) => {
     totalAmount,
     notes,
     couponCode: couponCode ? couponCode.toUpperCase() : undefined,
+    offerId: appliedOffer ? appliedOffer._id : undefined,
+    offerName: appliedOffer ? appliedOffer.title : undefined,
+    discountAmount: offerDiscountAmount,
+    originalTotal: subtotal,
+    finalTotal: totalAmount,
   });
 
   // 7. Payment method routing

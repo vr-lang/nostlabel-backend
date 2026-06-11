@@ -1,32 +1,58 @@
 import User from "../models/User.js";
 import Product from "../models/Product.js";
+import Offer from "../models/Offer.js";
+import { calculateOfferDiscount } from "./offerController.js";
 import { ApiError } from "../utils/apiError.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
-// Helper to compute cart totals dynamically based on latest DB prices
-const calculateCartTotals = (cartItems) => {
+// Helper to compute cart totals dynamically with active offers
+const getCartTotals = async (cartItems) => {
   let subtotal = 0;
-  let discount = 0;
-  let total = 0;
+  let mrpDiscount = 0;
 
   cartItems.forEach((item) => {
-    const itemPrice = item.product.discountPrice || item.product.price;
     subtotal += item.price * item.quantity;
-    
-    // Track saving difference if product is discounted
-    if (item.product.discountPrice) {
-      discount += (item.product.price - item.product.discountPrice) * item.quantity;
+    if (item.product && item.product.discountPrice) {
+      mrpDiscount += (item.product.price - item.product.discountPrice) * item.quantity;
     }
   });
 
-  total = subtotal; // Shipping / coupon adjustments are done at order checkout level
+  const now = new Date();
+  const activeOffers = await Offer.find({
+    isActive: true,
+    startDate: { $lte: now },
+    endDate: { $gte: now },
+  }).sort({ priority: -1 });
+
+  let offerDiscountAmount = 0;
+  let appliedOffer = null;
+
+  for (const offer of activeOffers) {
+    const offerRes = calculateOfferDiscount(cartItems, offer);
+    if (offerRes.discountAmount > offerDiscountAmount) {
+      offerDiscountAmount = offerRes.discountAmount;
+      appliedOffer = offerRes.appliedOffer;
+    }
+  }
 
   return {
     subtotal,
-    discount,
-    total,
+    discount: mrpDiscount,
+    offerDiscount: offerDiscountAmount,
+    offerName: appliedOffer ? appliedOffer.title : null,
+    total: Math.round((subtotal - offerDiscountAmount) * 100) / 100,
   };
+};
+
+// Helper for populating cart
+const populateCartOptions = {
+  path: "cart.product",
+  select: "name images price discountPrice status stock variants category",
+  populate: {
+    path: "category",
+    select: "name slug"
+  }
 };
 
 const addToCart = asyncHandler(async (req, res) => {
@@ -37,7 +63,6 @@ const addToCart = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Product is not available");
   }
 
-  // Find variant and check stock
   const variant = product.variants.find(
     (v) => v.size === size && v.color.toLowerCase() === color.toLowerCase()
   );
@@ -52,7 +77,6 @@ const addToCart = asyncHandler(async (req, res) => {
 
   const user = await User.findById(req.user._id);
 
-  // Check if variant already exists in cart
   const cartItemIndex = user.cart.findIndex(
     (item) =>
       item.product.toString() === productId &&
@@ -63,13 +87,12 @@ const addToCart = asyncHandler(async (req, res) => {
   const price = product.discountPrice || product.price;
 
   if (cartItemIndex > -1) {
-    // Check if updated quantity exceeds stock
     const newQty = user.cart[cartItemIndex].quantity + quantity;
     if (variant.stock < newQty) {
       throw new ApiError(400, `Cannot update cart. Total requested (${newQty}) exceeds available stock (${variant.stock}).`);
     }
     user.cart[cartItemIndex].quantity = newQty;
-    user.cart[cartItemIndex].price = price; // sync with current price
+    user.cart[cartItemIndex].price = price;
   } else {
     user.cart.push({
       product: productId,
@@ -82,9 +105,8 @@ const addToCart = asyncHandler(async (req, res) => {
 
   await user.save();
 
-  // Populate product details for response
-  const populatedUser = await User.findById(req.user._id).populate("cart.product", "name images price discountPrice");
-  const totals = calculateCartTotals(populatedUser.cart);
+  const populatedUser = await User.findById(req.user._id).populate(populateCartOptions);
+  const totals = await getCartTotals(populatedUser.cart);
 
   return res.status(200).json(
     new ApiResponse(
@@ -133,11 +155,11 @@ const updateCartQuantity = asyncHandler(async (req, res) => {
   }
 
   user.cart[cartItemIndex].quantity = quantity;
-  user.cart[cartItemIndex].price = product.discountPrice || product.price; // sync with current price
+  user.cart[cartItemIndex].price = product.discountPrice || product.price;
   await user.save();
 
-  const populatedUser = await User.findById(req.user._id).populate("cart.product", "name images price discountPrice");
-  const totals = calculateCartTotals(populatedUser.cart);
+  const populatedUser = await User.findById(req.user._id).populate(populateCartOptions);
+  const totals = await getCartTotals(populatedUser.cart);
 
   return res.status(200).json(
     new ApiResponse(
@@ -164,8 +186,8 @@ const removeFromCart = asyncHandler(async (req, res) => {
 
   await user.save();
 
-  const populatedUser = await User.findById(req.user._id).populate("cart.product", "name images price discountPrice");
-  const totals = calculateCartTotals(populatedUser.cart);
+  const populatedUser = await User.findById(req.user._id).populate(populateCartOptions);
+  const totals = await getCartTotals(populatedUser.cart);
 
   return res.status(200).json(
     new ApiResponse(
@@ -184,7 +206,7 @@ const clearCart = asyncHandler(async (req, res) => {
   return res.status(200).json(
     new ApiResponse(
       200,
-      { cart: [], subtotal: 0, discount: 0, total: 0 },
+      { cart: [], subtotal: 0, discount: 0, offerDiscount: 0, offerName: null, total: 0 },
       "Cart cleared successfully"
     )
   );
@@ -195,16 +217,14 @@ const getCart = asyncHandler(async (req, res) => {
     return res.status(200).json(
       new ApiResponse(
         200,
-        { cart: [], subtotal: 0, discount: 0, total: 0 },
+        { cart: [], subtotal: 0, discount: 0, offerDiscount: 0, offerName: null, total: 0 },
         "Guest cart details fetched successfully"
       )
     );
   }
 
-  const user = await User.findById(req.user._id).populate("cart.product", "name images price discountPrice status stock variants");
+  const user = await User.findById(req.user._id).populate(populateCartOptions);
   
-  // Clean cart items that might have been deleted or stock went zero if necessary
-  // Or just sync prices
   let isModified = false;
   
   for (let i = 0; i < user.cart.length; i++) {
@@ -227,7 +247,7 @@ const getCart = asyncHandler(async (req, res) => {
     await user.save();
   }
 
-  const totals = calculateCartTotals(user.cart);
+  const totals = await getCartTotals(user.cart);
 
   return res.status(200).json(
     new ApiResponse(

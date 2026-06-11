@@ -1,6 +1,8 @@
 import Coupon from "../models/Coupon.js";
 import User from "../models/User.js";
 import Order from "../models/Order.js";
+import Offer from "../models/Offer.js";
+import { calculateOfferDiscount } from "./offerController.js";
 import { ApiError } from "../utils/apiError.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -164,7 +166,10 @@ const applyCoupon = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Coupon usage limit has been reached");
   }
 
-  const user = await User.findById(req.user._id).populate("cart.product");
+  const user = await User.findById(req.user._id).populate({
+    path: "cart.product",
+    populate: { path: "category" }
+  });
   if (!user || user.cart.length === 0) {
     throw new ApiError(400, "Your shopping cart is empty");
   }
@@ -175,25 +180,42 @@ const applyCoupon = asyncHandler(async (req, res) => {
     cartSubtotal += activePrice * item.quantity;
   });
 
-  if (cartSubtotal < coupon.minimumOrderValue) {
+  const now = new Date();
+  const activeOffers = await Offer.find({
+    isActive: true,
+    startDate: { $lte: now },
+    endDate: { $gte: now },
+  }).sort({ priority: -1 });
+
+  let offerDiscountAmount = 0;
+  for (const offer of activeOffers) {
+    const offerRes = calculateOfferDiscount(user.cart, offer);
+    if (offerRes.discountAmount > offerDiscountAmount) {
+      offerDiscountAmount = offerRes.discountAmount;
+    }
+  }
+
+  const subtotalAfterOffer = cartSubtotal - offerDiscountAmount;
+
+  if (subtotalAfterOffer < coupon.minimumOrderValue) {
     throw new ApiError(
       400,
-      `Minimum purchase amount of ₹${coupon.minimumOrderValue} is required to apply this coupon. Your current subtotal is ₹${cartSubtotal}`
+      `Minimum purchase amount of ₹${coupon.minimumOrderValue} is required to apply this coupon. Your current subtotal after offer discount is ₹${subtotalAfterOffer}`
     );
   }
 
   let discountAmount = 0;
   if (coupon.discountType === "PERCENTAGE") {
-    discountAmount = (cartSubtotal * coupon.discountValue) / 100;
+    discountAmount = (subtotalAfterOffer * coupon.discountValue) / 100;
   } else {
     discountAmount = coupon.discountValue;
   }
 
-  if (discountAmount > cartSubtotal) {
-    discountAmount = cartSubtotal;
+  if (discountAmount > subtotalAfterOffer) {
+    discountAmount = subtotalAfterOffer;
   }
 
-  const finalTotal = cartSubtotal - discountAmount;
+  const finalTotal = subtotalAfterOffer - discountAmount;
 
   return res.status(200).json(
     new ApiResponse(

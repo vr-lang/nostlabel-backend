@@ -24,6 +24,37 @@ const startServer = async () => {
   try {
     await connectDB();
     
+    // Seed default offer if none exist
+    try {
+      const Offer = (await import("./models/Offer.js")).default;
+      const offersCount = await Offer.countDocuments();
+      if (offersCount === 0) {
+        console.log("No promotional offers found. Seeding default T-shirt bundle offer...");
+        const now = new Date();
+        const oneYearLater = new Date();
+        oneYearLater.setFullYear(now.getFullYear() + 1);
+
+        await Offer.create({
+          title: "BUY ANY 2 T-SHIRTS FOR ₹1400",
+          description: "Get any 2 premium t-shirts or oversized t-shirts for a flat price of ₹1400.",
+          offerType: "FIXED_BUNDLE_PRICE",
+          isActive: true,
+          startDate: now,
+          endDate: oneYearLater,
+          priority: 10,
+          displayLocation: "TOP_BAR",
+          rules: {
+            buyQuantity: 2,
+            buyCategory: "T-Shirts",
+            bundlePrice: 1400
+          }
+        });
+        console.log("Default T-shirt bundle offer seeded successfully!");
+      }
+    } catch (seedError) {
+      console.error("Error seeding default offer on startup:", seedError.message);
+    }
+    
     server.listen(PORT, async () => {
       console.log(`\n Server is running on port: ${PORT}`);
       console.log(` API Docs available at: http://localhost:${PORT}/api-docs`);
