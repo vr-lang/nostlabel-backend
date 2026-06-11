@@ -14,6 +14,7 @@ import reviewRoutes from "./reviewRoutes.js";
 import uploadRoutes from "./uploadRoutes.js";
 import debugRoutes from "./debugRoutes.js";
 import exchangeRoutes from "./exchangeRoutes.js";
+import homepageOfferRoutes from "./homepageOfferRoutes.js";
 
 const router = Router();
 
@@ -44,5 +45,6 @@ router.use("/reviews", reviewRoutes);
 router.use("/upload", uploadRoutes);
 router.use("/debug", debugRoutes);
 router.use("/exchange", exchangeRoutes);
+router.use("/homepage-offer", homepageOfferRoutes);
 
 export default router;
