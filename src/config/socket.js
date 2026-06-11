@@ -1,4 +1,5 @@
 import { Server } from "socket.io";
+import { isOriginAllowed } from "../utils/corsHelper.js";
 
 let io = null;
 const userSockets = new Map(); // userId -> socketId
@@ -7,7 +8,14 @@ const adminSockets = new Set(); // set of admin socketIds
 const initSocket = (server) => {
   io = new Server(server, {
     cors: {
-      origin: process.env.CLIENT_URL || "*",
+      origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+        if (isOriginAllowed(origin)) {
+          return callback(null, true);
+        }
+        console.warn(`[Socket CORS Audit] REJECTED ORIGIN: ${origin}`);
+        return callback(null, false);
+      },
       methods: ["GET", "POST"],
       credentials: true,
     },

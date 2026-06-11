@@ -13,6 +13,7 @@ import { errorHandler } from "./middlewares/errorMiddleware.js";
 import { apiLimiter } from "./middlewares/rateLimiter.js";
 import swaggerSpec from "./docs/swagger.js";
 import { ApiError } from "./utils/apiError.js";
+import { isOriginAllowed } from "./utils/corsHelper.js";
 
 dotenv.config();
 
@@ -20,38 +21,49 @@ const app = express();
 
 app.set("trust proxy", true);
 
-// 1. Logging Middleware
+// 1. Logging & CORS Audit Middleware
 if (process.env.NODE_ENV !== "production") {
   app.use(morgan("dev"));
 } else {
   app.use(morgan("combined"));
 }
 
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const method = req.method;
+  const hasCookies = req.headers.cookie ? "YES" : "NO";
+  const requestHeaders = req.headers["access-control-request-headers"];
+
+  console.log(
+    `[CORS Audit] Incoming Request - Method: ${method}, Path: ${req.path}, Origin: ${origin || "N/A"}, Has Cookies: ${hasCookies}, Access-Control-Request-Headers: ${requestHeaders || "N/A"}`
+  );
+
+  // Monitor outgoing CORS headers
+  const originalSetHeader = res.setHeader;
+  res.setHeader = function (name, value) {
+    if (name.toLowerCase().startsWith("access-control-")) {
+      console.log(`[CORS Audit] Outgoing Header - ${name}: ${value}`);
+    }
+    return originalSetHeader.apply(this, arguments);
+  };
+
+  next();
+});
+
 // 2. Security Middlewares
 app.use(helmet());
-
-const allowedOrigins = [
-  "http://localhost:3001",
-  "http://localhost:3002",
-  "http://localhost:3000",
-  "http://localhost:5173",
-  "https://nostlabel.com",
-  "https://www.nostlabel.com",
-];
 
 app.use(
   cors({
     origin: function (origin, callback) {
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
+      if (isOriginAllowed(origin)) {
         return callback(null, true);
       }
 
-      console.log("Blocked Origin:", origin);
-      
-
-      return callback(new Error("Not allowed by CORS"));
+      console.warn(`[CORS Audit] REJECTED CROSS-ORIGIN ACCESS: ${origin}`);
+      return callback(null, false); // Rejects by omitting Access-Control-Allow-Origin
     },
     credentials: true,
     maxAge: 0, // Disable browser preflight caching
