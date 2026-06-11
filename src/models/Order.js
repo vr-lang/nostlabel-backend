@@ -161,6 +161,9 @@ const orderSchema = new mongoose.Schema(
   }
 );
 
+orderSchema.index({ customer: 1 });
+orderSchema.index({ razorpayOrderId: 1 });
+
 // Pre-save hook to generate order number
 orderSchema.pre("save", async function (next) {
   if (this.isNew && !this.orderNumber) {

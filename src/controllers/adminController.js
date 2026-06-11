@@ -257,43 +257,48 @@ const getAllCustomersAdmin = asyncHandler(async (req, res) => {
   // Fetch all matching customers to calculate statistics and handle VIP status filter
   const allMatchingCustomers = await User.find(mongoQuery).select("-password");
   
-  // Aggregate stats for each customer
-  let customersWithStats = await Promise.all(
-    allMatchingCustomers.map(async (customer) => {
-      const orderSummary = await Order.aggregate([
-        { $match: { customer: customer._id } },
-        {
-          $group: {
-            _id: null,
-            ordersCount: { $sum: 1 },
-            totalSpend: { $sum: "$totalAmount" },
-            lastPurchase: { $max: "$createdAt" }
-          }
-        }
-      ]);
-
-      const stats = orderSummary[0] || { ordersCount: 0, totalSpend: 0, lastPurchase: null };
-      
-      let customerStatus = "ACTIVE";
-      if (customer.isBlocked) {
-        customerStatus = "BLOCKED";
-      } else if (stats.totalSpend > 10000) {
-        customerStatus = "VIP";
-      } else if ((Date.now() - new Date(customer.createdAt).getTime()) < 30 * 24 * 60 * 60 * 1000) {
-        customerStatus = "NEW";
-      } else if (stats.ordersCount === 0) {
-        customerStatus = "INACTIVE";
+  // Aggregate stats for all matching customers in a single query
+  const customerIds = allMatchingCustomers.map(c => c._id);
+  const orderStats = await Order.aggregate([
+    { $match: { customer: { $in: customerIds } } },
+    {
+      $group: {
+        _id: "$customer",
+        ordersCount: { $sum: 1 },
+        totalSpend: { $sum: "$totalAmount" },
+        lastPurchase: { $max: "$createdAt" }
       }
+    }
+  ]);
 
-      return {
-        ...customer.toObject(),
-        ordersCount: stats.ordersCount,
-        totalSpend: stats.totalSpend,
-        lastPurchase: stats.lastPurchase,
-        customerStatus
-      };
-    })
-  );
+  // Create lookup map for O(1) matching
+  const statsMap = {};
+  orderStats.forEach(stat => {
+    statsMap[stat._id.toString()] = stat;
+  });
+
+  let customersWithStats = allMatchingCustomers.map((customer) => {
+    const stats = statsMap[customer._id.toString()] || { ordersCount: 0, totalSpend: 0, lastPurchase: null };
+    
+    let customerStatus = "ACTIVE";
+    if (customer.isBlocked) {
+      customerStatus = "BLOCKED";
+    } else if (stats.totalSpend > 10000) {
+      customerStatus = "VIP";
+    } else if ((Date.now() - new Date(customer.createdAt).getTime()) < 30 * 24 * 60 * 60 * 1000) {
+      customerStatus = "NEW";
+    } else if (stats.ordersCount === 0) {
+      customerStatus = "INACTIVE";
+    }
+
+    return {
+      ...customer.toObject(),
+      ordersCount: stats.ordersCount,
+      totalSpend: stats.totalSpend,
+      lastPurchase: stats.lastPurchase,
+      customerStatus
+    };
+  });
 
   // Apply VIP status filtering if specified
   if (vipStatus) {
@@ -751,15 +756,17 @@ const getInventoryAnalytics = asyncHandler(async (req, res) => {
     { $limit: 5 }
   ]);
 
-  const topSellingPopulated = await Promise.all(
-    topSelling.map(async (item) => {
-      const prod = await Product.findById(item._id).select("name images price slug");
-      return {
-        ...item,
-        product: prod
-      };
-    })
-  );
+  const productIds = topSelling.map(item => item._id).filter(id => id);
+  const products = await Product.find({ _id: { $in: productIds } }).select("name images price slug");
+  const productMap = {};
+  products.forEach(p => {
+    productMap[p._id.toString()] = p;
+  });
+
+  const topSellingPopulated = topSelling.map((item) => ({
+    ...item,
+    product: productMap[item._id?.toString()] || null
+  }));
 
   const activeTopSelling = topSellingPopulated.filter(item => item.product !== null);
 
@@ -1153,16 +1160,21 @@ const getVipCustomersAdmin = asyncHandler(async (req, res) => {
     { $limit: 10 }
   ]);
 
-  const populatedSpenders = await Promise.all(
-    spenders.map(async (s) => {
-      const user = await User.findById(s._id).select("name email phone profileImage createdAt");
-      if (!user) return null;
-      return {
-        ...s,
-        customer: user
-      };
-    })
-  );
+  const userIds = spenders.map(s => s._id).filter(id => id);
+  const users = await User.find({ _id: { $in: userIds } }).select("name email phone profileImage createdAt");
+  const userMap = {};
+  users.forEach(u => {
+    userMap[u._id.toString()] = u;
+  });
+
+  const populatedSpenders = spenders.map((s) => {
+    const user = userMap[s._id?.toString()];
+    if (!user) return null;
+    return {
+      ...s,
+      customer: user
+    };
+  });
 
   const activeVips = populatedSpenders.filter(s => s !== null);
 
@@ -1374,8 +1386,15 @@ const getAnalyticsTopProducts = asyncHandler(async (req, res) => {
     { $limit: 6 }
   ]);
 
-  const topProducts = await Promise.all(topSales.map(async (s) => {
-    const prod = await Product.findById(s._id).select("name images stock price");
+  const productIds = topSales.map(s => s._id).filter(id => id);
+  const products = await Product.find({ _id: { $in: productIds } }).select("name images stock price");
+  const productMap = {};
+  products.forEach(p => {
+    productMap[p._id.toString()] = p;
+  });
+
+  const topProducts = topSales.map((s) => {
+    const prod = productMap[s._id?.toString()];
     if (!prod) return null;
     return {
       name: prod.name,
@@ -1385,7 +1404,7 @@ const getAnalyticsTopProducts = asyncHandler(async (req, res) => {
       profitMargin: 65,
       inventoryRemaining: prod.stock
     };
-  }));
+  });
 
   return res.status(200).json(
     new ApiResponse(200, topProducts.filter(p => p !== null), "Top products fetched successfully")
@@ -1512,20 +1531,25 @@ const getTopSellingProducts = asyncHandler(async (req, res) => {
     { $limit: 10 }
   ]);
 
-  const topProducts = await Promise.all(
-    topSales.map(async (s) => {
-      const prod = await Product.findById(s._id).select("name images stock price");
-      if (!prod) return null;
-      return {
-        name: prod.name,
-        images: prod.images || [],
-        unitsSold: s.unitsSold,
-        revenue: s.revenue,
-        inventoryRemaining: prod.stock,
-        growth: 12.5
-      };
-    })
-  );
+  const productIds = topSales.map(s => s._id).filter(id => id);
+  const products = await Product.find({ _id: { $in: productIds } }).select("name images stock price");
+  const productMap = {};
+  products.forEach(p => {
+    productMap[p._id.toString()] = p;
+  });
+
+  const topProducts = topSales.map((s) => {
+    const prod = productMap[s._id?.toString()];
+    if (!prod) return null;
+    return {
+      name: prod.name,
+      images: prod.images || [],
+      unitsSold: s.unitsSold,
+      revenue: s.revenue,
+      inventoryRemaining: prod.stock,
+      growth: 12.5
+    };
+  });
 
   return res.status(200).json(
     new ApiResponse(200, topProducts.filter(p => p !== null), "Top selling products fetched successfully")
@@ -1547,20 +1571,25 @@ const getProductPerformance = asyncHandler(async (req, res) => {
     }
   ]);
 
-  const performance = await Promise.all(
-    productStats.map(async (stat) => {
-      const prod = await Product.findById(stat._id).select("name stock price");
-      if (!prod) return null;
-      const performancePct = Math.min(Math.round((stat.unitsSold / (prod.stock + stat.unitsSold || 1)) * 100), 100);
-      return {
-        product: prod.name,
-        orders: stat.ordersCount,
-        revenue: stat.revenue,
-        stock: prod.stock,
-        performance: performancePct
-      };
-    })
-  );
+  const productIds = productStats.map(s => s._id).filter(id => id);
+  const products = await Product.find({ _id: { $in: productIds } }).select("name stock price");
+  const productMap = {};
+  products.forEach(p => {
+    productMap[p._id.toString()] = p;
+  });
+
+  const performance = productStats.map((stat) => {
+    const prod = productMap[stat._id?.toString()];
+    if (!prod) return null;
+    const performancePct = Math.min(Math.round((stat.unitsSold / (prod.stock + stat.unitsSold || 1)) * 100), 100);
+    return {
+      product: prod.name,
+      orders: stat.ordersCount,
+      revenue: stat.revenue,
+      stock: prod.stock,
+      performance: performancePct
+    };
+  });
 
   return res.status(200).json(
     new ApiResponse(200, performance.filter(p => p !== null), "Product performance stats fetched successfully")

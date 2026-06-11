@@ -142,6 +142,9 @@ productSchema.index({ name: "text", description: "text" });
 productSchema.index({ category: 1 });
 productSchema.index({ status: 1 });
 productSchema.index({ price: 1 });
+productSchema.index({ bestseller: 1, status: 1 });
+productSchema.index({ newArrival: 1, status: 1 });
+productSchema.index({ featured: 1, status: 1 });
 
 // Helper to keep total stock in sync with variants
 productSchema.pre("save", function (next) {

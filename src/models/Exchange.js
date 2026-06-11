@@ -64,6 +64,10 @@ const exchangeSchema = new mongoose.Schema(
   }
 );
 
+exchangeSchema.index({ customer: 1 });
+exchangeSchema.index({ order: 1 });
+exchangeSchema.index({ product: 1 });
+
 // Pre-save hook to generate exchange number
 exchangeSchema.pre("save", async function (next) {
   if (this.isNew && !this.exchangeNumber) {
