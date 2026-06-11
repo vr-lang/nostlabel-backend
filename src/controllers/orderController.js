@@ -97,7 +97,8 @@ const placeOrder = asyncHandler(async (req, res) => {
 
   // 5. Calculate shipping and taxes
   const shippingCharge = subtotal > 1500 ? 0 : 99; // Free shipping above 1500
-  const tax = Math.round((subtotal - discount) * 0.12 * 100) / 100; // 12% GST
+  const gstRate = process.env.GST_RATE !== undefined ? parseFloat(process.env.GST_RATE) : 12;
+  const tax = Math.round((subtotal - discount) * (gstRate / 100) * 100) / 100;
   const totalAmount = Math.round((subtotal - discount + shippingCharge + tax) * 100) / 100;
 
   // 6. Create the order

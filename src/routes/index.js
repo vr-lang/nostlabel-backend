@@ -18,10 +18,12 @@ const router = Router();
 
 // Lightweight health check endpoint
 router.get("/health", (req, res) => {
+  const gstRate = process.env.GST_RATE !== undefined ? parseFloat(process.env.GST_RATE) : 12;
   return res.status(200).json({
     success: true,
     message: "Server is warm and healthy",
     timestamp: new Date(),
+    gstRate,
   });
 });
 
