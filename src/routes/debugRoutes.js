@@ -4,8 +4,12 @@ import { sendEmail } from "../services/emailService.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import { ApiError } from "../utils/apiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { verifyJWT, isAdmin } from "../middlewares/authMiddleware.js";
 
 const router = Router();
+
+// Secure all debug routes
+router.use(verifyJWT, isAdmin);
 
 // GET /api/debug/email-health
 router.get("/email-health", asyncHandler(async (req, res) => {

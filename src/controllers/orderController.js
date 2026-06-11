@@ -123,6 +123,7 @@ const placeOrder = asyncHandler(async (req, res) => {
     tax,
     totalAmount,
     notes,
+    couponCode: couponCode ? couponCode.toUpperCase() : undefined,
   });
 
   // 7. Payment method routing

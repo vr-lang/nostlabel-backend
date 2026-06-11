@@ -25,12 +25,12 @@ const finalizeSuccessfulPayment = async (order, razorpayPaymentId, razorpaySigna
   await User.findByIdAndUpdate(userId, { $set: { cart: [] } });
 
   // Increment coupon usage if coupon code was applied
-  if (order.discount > 0) {
-    // We can find coupon applied in items/history, but wait:
-    // Usually coupon is checked during placing, we can extract from notes or add a field.
-    // Let's check coupon since we didn't add coupon ref in Order schema.
-    // Let's assume order had coupon code applied in order flow.
-    // We can do user's coupon tracking.
+  if (order.couponCode) {
+    const coupon = await Coupon.findOne({ code: order.couponCode.toUpperCase() });
+    if (coupon) {
+      coupon.usedCount += 1;
+      await coupon.save();
+    }
   }
 
   // Socket notification

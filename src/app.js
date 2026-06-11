@@ -18,7 +18,7 @@ dotenv.config();
 
 const app = express();
 
-app.set("trust proxy", 1);
+app.set("trust proxy", true);
 
 // 1. Logging Middleware
 if (process.env.NODE_ENV !== "production") {
@@ -31,9 +31,10 @@ if (process.env.NODE_ENV !== "production") {
 app.use(helmet());
 
 const allowedOrigins = [
-  "http://localhost:5173",
+  "http://localhost:3001",
+  "http://localhost:3002",
   "http://localhost:3000",
-  "https://nostlabel-frontend.vercel.app",
+  "http://localhost:5173",
   "https://nostlabel.com",
   "https://www.nostlabel.com",
 ];
@@ -48,10 +49,12 @@ app.use(
       }
 
       console.log("Blocked Origin:", origin);
+      
 
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
+    maxAge: 0, // Disable browser preflight caching
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",

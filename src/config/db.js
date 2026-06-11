@@ -33,41 +33,38 @@ const sanitizeMongoUri = (uri) => {
 
 const connectDB = async () => {
   try {
+    console.log("========== ENVIRONMENT AUDIT ==========");
+    const requiredEnv = ["MONGODB_URI", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
+    const missingEnv = requiredEnv.filter((key) => !process.env[key]);
+
+    if (missingEnv.length > 0) {
+      console.error(`❌ CRITICAL CONFIGURATION ERROR: Missing required environment variables: ${missingEnv.join(", ")}`);
+      process.exit(1);
+    }
+    console.log("✓ All critical configuration variables verified.");
+    console.log("=======================================");
+
     console.log("========== DATABASE DEBUG ==========");
     console.log("NODE_ENV:", process.env.NODE_ENV);
-    console.log("MONGODB_URI Exists:", !!process.env.MONGODB_URI);
-
-    if (process.env.MONGODB_URI) {
-      console.log(
-        "MONGODB_URI Preview:",
-        process.env.MONGODB_URI.substring(0, 25) + "..."
-      );
-    }
+    console.log("Mongo URI exists:", !!process.env.MONGODB_URI);
+    console.log("Mongo connection state:", mongoose.connection.readyState);
 
     const rawUri = process.env.MONGODB_URI;
-
-    if (!rawUri) {
-      throw new Error("MONGODB_URI environment variable is missing");
-    }
-
     const sanitizedUri = sanitizeMongoUri(rawUri);
 
     console.log("Attempting MongoDB connection...");
-
     const connectionInstance = await mongoose.connect(sanitizedUri, {
       serverSelectionTimeoutMS: 10000,
     });
 
-    console.log(
-      `MongoDB Connected! DB HOST: ${connectionInstance.connection.host}`
-    );
-
+    console.log("Mongo connection state after connect:", mongoose.connection.readyState);
+    console.log("Mongo host:", mongoose.connection.host);
     console.log("========== DATABASE CONNECTED ==========");
   } catch (error) {
-    console.error("========== DATABASE ERROR ==========");
-    console.error(error);
-    console.error("====================================");
-
+    console.error("========== DATABASE CONNECTION ERROR ==========");
+    console.error("Connection failed with error details:", error.message || error);
+    console.error("Current Mongo Connection State:", mongoose.connection.readyState);
+    console.error("==============================================");
     process.exit(1);
   }
 };

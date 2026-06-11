@@ -37,7 +37,7 @@ const seedDB = async () => {
     const productData = {
       name: "Nostlable Signature Heavyweight Tee",
       slug: "nostlable-signature-heavyweight-tee",
-      description: "Crafted from 280 GSM long-staple organic cotton. This tee features an optimized drop-shoulder silhouette, pre-shrunk fabric, and double-needle collar stitch detailing for premium durability and a structured drape.",
+      description: "Crafted from 220 GSM long-staple organic cotton. This tee features an optimized drop-shoulder silhouette, pre-shrunk fabric, and double-needle collar stitch detailing for premium durability and a structured drape.",
       brand: "Nostlable",
       category: tshirtsCategory._id,
       price: 1499,
@@ -45,8 +45,14 @@ const seedDB = async () => {
       sizes: ["S", "M", "L", "XL", "XXL"],
       colors: ["Black", "White", "Blue", "Red"],
       images: [
-        "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&q=80&w=1000",
-        "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?auto=format&fit=crop&q=80&w=1000",
+        {
+          url: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&q=80&w=1000",
+          public_id: "seed_sig_tee_1"
+        },
+        {
+          url: "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?auto=format&fit=crop&q=80&w=1000",
+          public_id: "seed_sig_tee_2"
+        },
       ],
       featured: true,
       bestseller: true,
@@ -54,7 +60,7 @@ const seedDB = async () => {
       rating: 4.8,
       reviewCount: 15,
       seoTitle: "Nostlable Signature Heavyweight Cotton Tee",
-      seoDescription: "Shop the Nostlable signature 280 GSM heavyweight cotton drop-shoulder T-shirt. Premium everyday luxury streetwear.",
+      seoDescription: "Shop the Nostlable signature 220 GSM heavyweight cotton drop-shoulder T-shirt. Premium everyday luxury streetwear.",
       status: "ACTIVE",
       variants: [
         // Black Variants

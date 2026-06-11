@@ -1,5 +1,6 @@
 import Coupon from "../models/Coupon.js";
 import User from "../models/User.js";
+import Order from "../models/Order.js";
 import { ApiError } from "../utils/apiError.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -84,12 +85,62 @@ const deleteCoupon = asyncHandler(async (req, res) => {
 // Admin/Customer: List all coupons
 const getCoupons = asyncHandler(async (req, res) => {
   const filter = {};
-  if (!req.user || req.user.role !== "ADMIN") {
+  const isAdminRequest = req.user && req.user.role === "ADMIN";
+
+  if (!isAdminRequest) {
     filter.isActive = true;
     filter.expiryDate = { $gt: new Date() };
   }
 
   const coupons = await Coupon.find(filter).sort({ expiryDate: 1 });
+
+  if (isAdminRequest) {
+    const couponsWithMetrics = await Promise.all(
+      coupons.map(async (coupon) => {
+        const successfulOrders = await Order.find({
+          couponCode: coupon.code,
+          orderStatus: { $ne: "CANCELLED" },
+          paymentStatus: { $ne: "FAILED" },
+        });
+
+        const totalUsage = successfulOrders.length;
+        const uniqueCustomers = new Set(
+          successfulOrders.map((o) => o.customer.toString())
+        ).size;
+        const revenueGenerated = successfulOrders.reduce(
+          (sum, o) => sum + o.totalAmount,
+          0
+        );
+        const remainingUsage = Math.max(0, coupon.usageLimit - totalUsage);
+
+        // Keep database usedCount in sync
+        if (coupon.usedCount !== totalUsage) {
+          coupon.usedCount = totalUsage;
+          await coupon.save();
+        }
+
+        return {
+          ...coupon.toObject(),
+          metrics: {
+            totalUsage,
+            uniqueCustomers,
+            revenueGenerated,
+            remainingUsage,
+          },
+        };
+      })
+    );
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          couponsWithMetrics,
+          "Coupons retrieved successfully with metrics"
+        )
+      );
+  }
 
   return res
     .status(200)

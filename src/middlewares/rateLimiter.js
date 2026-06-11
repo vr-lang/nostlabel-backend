@@ -6,6 +6,7 @@ const apiLimiter = rateLimit({
   max: 100, // Limit each IP to 100 requests per `window`
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  validate: { xForwardedForHeader: false },
   skip: (req) => {
     return req.originalUrl && req.originalUrl.includes("/admin");
   },
@@ -19,6 +20,7 @@ const authLimiter = rateLimit({
   max: 15, // Limit each IP to 15 login/register attempts per hour
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   skip: (req) => {
     return req.originalUrl && req.originalUrl.includes("/admin");
   },
@@ -32,6 +34,7 @@ const otpLimiter = rateLimit({
   max: 5, // Limit each IP to 5 OTP requests per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   handler: (req, res, next, options) => {
     throw new ApiError(429, "Too many OTP requests from this IP. Please try again after 15 minutes");
   },

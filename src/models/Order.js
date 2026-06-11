@@ -131,6 +131,11 @@ const orderSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    couponCode: {
+      type: String,
+      uppercase: true,
+      trim: true,
+    },
   },
   {
     timestamps: true,

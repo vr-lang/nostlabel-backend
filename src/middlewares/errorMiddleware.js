@@ -1,4 +1,5 @@
 import { ApiError } from "../utils/apiError.js";
+import mongoose from "mongoose";
 
 const errorHandler = (err, req, res, next) => {
   let error = err;
@@ -21,6 +22,16 @@ const errorHandler = (err, req, res, next) => {
     const message = err.code === "LIMIT_FILE_SIZE" ? "File size exceeds the 10MB limit" : err.message;
     error = new ApiError(400, message);
   }
+
+  // Log error details for debugging and production analysis
+  console.error("========== SERVER ERROR EVENT ==========");
+  console.error(`Request Method: ${req.method}`);
+  console.error(`Request Path: ${req.originalUrl}`);
+  console.error(`Response HTTP Status: ${error.statusCode}`);
+  console.error(`Error Message: ${error.message}`);
+  console.error(`Database Connection State: ${mongoose.connection.readyState}`);
+  console.error(`Stack Trace:\n${error.stack}`);
+  console.error("========================================");
 
   const response = {
     success: false,

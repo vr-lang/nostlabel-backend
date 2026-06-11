@@ -154,7 +154,8 @@ const getExchangeById = asyncHandler(async (req, res) => {
   }
 
   // Access check
-  if (req.user.role !== "ADMIN" && exchange.customer.toString() !== req.user._id.toString()) {
+  const customerId = exchange.customer._id ? exchange.customer._id.toString() : exchange.customer.toString();
+  if (req.user.role !== "ADMIN" && customerId !== req.user._id.toString()) {
     throw new ApiError(403, "Forbidden: You are not authorized to view this record");
   }
 

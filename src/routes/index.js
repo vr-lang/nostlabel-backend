@@ -16,6 +16,15 @@ import exchangeRoutes from "./exchangeRoutes.js";
 
 const router = Router();
 
+// Lightweight health check endpoint
+router.get("/health", (req, res) => {
+  return res.status(200).json({
+    success: true,
+    message: "Server is warm and healthy",
+    timestamp: new Date(),
+  });
+});
+
 // Mount API routes
 router.use("/auth", authRoutes);
 router.use("/admin/auth", adminAuthRoutes);

@@ -191,6 +191,16 @@ const clearCart = asyncHandler(async (req, res) => {
 });
 
 const getCart = asyncHandler(async (req, res) => {
+  if (!req.user) {
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        { cart: [], subtotal: 0, discount: 0, total: 0 },
+        "Guest cart details fetched successfully"
+      )
+    );
+  }
+
   const user = await User.findById(req.user._id).populate("cart.product", "name images price discountPrice status stock variants");
   
   // Clean cart items that might have been deleted or stock went zero if necessary
