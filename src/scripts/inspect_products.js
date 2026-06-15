@@ -8,7 +8,7 @@ dotenv.config();
 const run = async () => {
   try {
     await connectDB();
-    const products = await Product.find().limit(5);
+        const products = await Product.find().limit(100);
     console.log("=== DB PRODUCTS ===");
     for (const p of products) {
       console.log(`Product ID: ${p._id}`);
